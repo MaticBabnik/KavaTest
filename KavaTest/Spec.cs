@@ -175,13 +175,10 @@ partial class KavaSpec
                 ?? throw new Exception($"'{testSubList}' is not a test number or a test range.");
 
             var testNumbers = match.Groups.Values.Skip(1)
-                .Select(x => uint.TryParse(x.ValueSpan, out uint val) ? (int)val : -1).ToArray();
+                .Select<Group,int?>(x => uint.TryParse(x.ValueSpan, out uint val) ? (int)val : null).ToArray();
 
-            if (testNumbers.Length == 1)
-                which.Add(testNumbers[0]);
-            else
-                for (int i = testNumbers[0]; i <= testNumbers[1]; i++)
-                    which.Add(i);
+            for (int i = testNumbers[0] ?? 0; i <= (testNumbers[1] ?? testNumbers[0] ?? 0); i++)
+                which.Add(i);
 
         }
 
