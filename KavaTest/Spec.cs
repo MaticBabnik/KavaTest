@@ -57,7 +57,7 @@ internal partial class SourceGenerationContext : JsonSerializerContext
 {
 }
 
-class KavaSpec
+partial class KavaSpec
 {
     static readonly JsonSerializerOptions serializeOptions = new()
     {
@@ -159,6 +159,33 @@ class KavaSpec
             var filePath = Path.Join(viriPath, file.filename);
             File.WriteAllText(filePath, file.content);
         }
+    }
+
+
+    [GeneratedRegex("^(\\d{1,3})(?:-(\\d{1,3}))?$")]
+    private static partial Regex TestSublistPattern();
+
+    public Test[] GetTestSubset(string testList)
+    {
+        HashSet<int> which = new();
+
+        foreach (var testSubList in testList.Split(','))
+        {
+            var match = TestSublistPattern().Match(testSubList)
+                ?? throw new Exception($"'{testSubList}' is not a test number or a test range.");
+
+            var testNumbers = match.Groups.Values.Skip(1)
+                .Select(x => uint.TryParse(x.ValueSpan, out uint val) ? (int)val : -1).ToArray();
+
+            if (testNumbers.Length == 1)
+                which.Add(testNumbers[0]);
+            else
+                for (int i = testNumbers[0]; i <= testNumbers[1]; i++)
+                    which.Add(i);
+
+        }
+
+        return Tests.Where(x => which.Contains(x.id)).ToArray();
     }
 
     public static KavaSpec Restore(DirectoryInfo d, string specName)

@@ -65,7 +65,7 @@ class Program
         await ShowInBrowser(res, $"TestResult-{specName}-");
     }
 
-    static async Task Test(FileInfo f, DirectoryInfo d, bool noDiff, bool failFatal)
+    static async Task Test(FileInfo f, string? testList, DirectoryInfo d, bool noDiff, bool failFatal)
     {
         if (!f.Exists) throw new Exception("File not found");
         if (!f.Name.EndsWith(".java")) throw new Exception("Supply a Java file");
@@ -75,10 +75,12 @@ class Program
 
         var program = await JavaProgram.Compile(f, d);
 
+        var testsToRun = testList == null ? spec.Tests : spec.GetTestSubset(testList);
+
         Dictionary<int, string> testResults = new();
 
         await Task.WhenAll(
-            spec.Tests.Select(async test =>
+            testsToRun.Select(async test =>
             {
                 var stdout = await program.MainS(test.args);
                 lock (testResults)
@@ -88,41 +90,47 @@ class Program
             }).ToArray());
 
         int n_passed = 0;
-        foreach (var t in spec.Tests)
+        foreach (var t in testsToRun)
         {
             var diff = InlineDiffBuilder.Diff(t.expectedStdout, testResults.GetValueOrDefault(t.id, ""));
 
             if (!diff.HasDifferences) n_passed++;
 
-            Console.WriteLine($"Test {t.id,3}: {(!diff.HasDifferences ? "PASS" : "FAIL")}");
+            Console.Write($"Test {t.id,3}: ");
+
+            Console.ForegroundColor = diff.HasDifferences ? ConsoleColor.Red : ConsoleColor.Green;
+            Console.WriteLine(diff.HasDifferences ? "FAIL" : "PASS");
+            Console.ForegroundColor = ConsoleColor.White;
+
             if (diff.HasDifferences && !noDiff)
             {
 
-                var savedColor = Console.ForegroundColor;
+                var savedColor = Console.BackgroundColor;
                 foreach (var line in diff.Lines)
                 {
                     switch (line.Type)
                     {
                         case ChangeType.Inserted:
-                            Console.ForegroundColor = ConsoleColor.Green;
+                            Console.BackgroundColor = ConsoleColor.Green;
                             Console.Write("+ ");
                             break;
                         case ChangeType.Deleted:
-                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.BackgroundColor = ConsoleColor.Red;
                             Console.Write("- ");
                             break;
                         default:
-                            Console.ForegroundColor = ConsoleColor.Gray; // compromise for dark or light background
+                            Console.BackgroundColor = ConsoleColor.Gray;
                             Console.Write($"  ");
                             break;
                     }
 
-                    Console.WriteLine(line.Text);
+                    Console.Write(line.Text);
+                    Console.BackgroundColor = savedColor;
+                    Console.WriteLine();
                 }
-                Console.ForegroundColor = savedColor;
 
             }
-            
+
             if (diff.HasDifferences && failFatal)
             {
                 Console.WriteLine($"Exiting due to failure ({t.id})");
@@ -130,16 +138,21 @@ class Program
             }
         }
 
-        Console.WriteLine($"{n_passed}/{spec.Tests.Length}");
+        Console.WriteLine($"{n_passed}/{testsToRun.Length}");
     }
 
     static async Task<int> Main(string[] args)
     {
         Option<DirectoryInfo> rootDir = new("--rootDir", () => new DirectoryInfo(Directory.GetCurrentDirectory()), "Where to store specs");
         rootDir.AddAlias("-d");
+        Option<string?> tests = new("--tests", "Override which tests to run");
+        tests.AddAlias("-t");
 
         Option<bool> noDiffs = new("--nodiff", "Never display diffs");
+        noDiffs.AddAlias("-b");
+
         Option<bool> failFatal = new("--failfatal", "Exit on first test failure");
+        failFatal.AddAlias("-f");
 
         Argument<FileInfo> sourceFile = new("sourceFile", "File to test");
         Argument<string> specName = new("specName", "Name of the spec");
@@ -159,7 +172,8 @@ class Program
         test.AddArgument(sourceFile);
         test.AddOption(noDiffs);
         test.AddOption(failFatal);
-        test.SetHandler(Test, sourceFile, rootDir, noDiffs, failFatal);
+        test.AddOption(tests);
+        test.SetHandler(Test, sourceFile, tests, rootDir, noDiffs, failFatal);
 
         RootCommand root = new();
         root.AddCommand(list);
@@ -168,7 +182,6 @@ class Program
         root.AddCommand(test);
         root.AddGlobalOption(rootDir);
 
-        // return await root.InvokeAsync(["-d", "test", "test", "../p2/DN02.java"]);
         return await root.InvokeAsync(args);
     }
 
