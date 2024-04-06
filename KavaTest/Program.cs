@@ -89,6 +89,10 @@ class Program
                 }
             }).ToArray());
 
+
+        ConsoleColor ogForeground = Console.ForegroundColor,
+                     ogBackground = Console.BackgroundColor;
+
         int n_passed = 0;
         foreach (var t in testsToRun)
         {
@@ -100,21 +104,22 @@ class Program
 
             Console.ForegroundColor = diff.HasDifferences ? ConsoleColor.Red : ConsoleColor.Green;
             Console.WriteLine(diff.HasDifferences ? "FAIL" : "PASS");
-            Console.ForegroundColor = ConsoleColor.White;
+            Console.ForegroundColor = ogForeground;
 
             if (diff.HasDifferences && !noDiff)
             {
 
-                var savedColor = Console.BackgroundColor;
                 foreach (var line in diff.Lines)
                 {
                     switch (line.Type)
                     {
                         case ChangeType.Inserted:
+                            Console.ForegroundColor = ConsoleColor.White;
                             Console.BackgroundColor = ConsoleColor.Green;
                             Console.Write("+ ");
                             break;
                         case ChangeType.Deleted:
+                            Console.ForegroundColor = ConsoleColor.White;
                             Console.BackgroundColor = ConsoleColor.Red;
                             Console.Write("- ");
                             break;
@@ -125,7 +130,8 @@ class Program
                     }
 
                     Console.Write(line.Text);
-                    Console.BackgroundColor = savedColor;
+                    Console.BackgroundColor = ogBackground;
+                    Console.ForegroundColor = ogForeground;
                     Console.WriteLine();
                 }
 
